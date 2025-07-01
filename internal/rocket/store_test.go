@@ -116,7 +116,6 @@ func TestInMemoryRocketStore_Concurrency(t *testing.T) {
 	store := NewInMemoryRocketStore(logger)
 	rocketID := uuid.New()
 
-	// Горутина для записи
 	go func() {
 		for i := 0; i < 100; i++ {
 			state := State{
