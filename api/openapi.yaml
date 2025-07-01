@@ -1,0 +1,275 @@
+openapi: 3.0.3
+info:
+  title: Rocket State Service API
+  description: |
+    API for monitoring the state of rockets based on incoming telemetry messages.
+    Handles out-of-order and at-least-once message delivery to maintain an accurate
+    current state for each rocket.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+
+tags:
+  - name: Rockets
+    description: Operations related to rocket state management
+  - name: Messages
+    description: Operations for ingesting rocket telemetry messages
+
+paths:
+  /v1/rockets:
+    get:
+      summary: Get a list of all rockets and their current states
+      operationId: listRockets
+      tags:
+        - Rockets
+      parameters:
+        - name: sortBy
+          in: query
+          description: Field to sort by (e.g., id, type, speed, mission, lastUpdateTime)
+          required: false
+          schema:
+            type: string
+            enum: [id, type, speed, mission, lastUpdateTime]
+        - name: sortOrder
+          in: query
+          description: Sort order (asc or desc)
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+      responses:
+        '200':
+          description: A list of rockets.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RocketState'
+        '400':
+          description: Invalid message format or content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/rockets/{id}:
+    get:
+      summary: Get the current state of a specific rocket
+      operationId: getRocketState
+      tags:
+        - Rockets
+      parameters:
+        - name: id
+          in: path
+          description: The unique identifier (channel) of the rocket.
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: 193270a9-c9cf-404a-8f83-838e71d9ae67
+      responses:
+        '200':
+          description: The current state of the rocket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RocketState'
+        '404':
+          description: Rocket not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /messages:
+    post:
+      summary: Ingest a new rocket telemetry message
+      operationId: ingestMessage
+      tags:
+        - Messages
+      requestBody:
+        description: Rocket telemetry message. The actual payload structure in 'message' field depends on 'metadata.messageType'.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryMessage'
+      responses:
+        '202':
+          description: Message accepted for processing.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: Message accepted
+        '400':
+          description: Invalid message format or content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error during message processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    RocketState:
+      type: object
+      description: The current aggregated state of a rocket.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier (channel) of the rocket.
+          example: 193270a9-c9cf-404a-8f83-838e71d9ae67
+        type:
+          type: string
+          description: The type of the rocket (e.g., Falcon-9, Soyuz).
+          example: Falcon-9
+        currentSpeed:
+          type: integer
+          format: int64
+          description: Current speed of the rocket in meters per second (m/s).
+          example: 8000
+        mission:
+          type: string
+          description: The current mission assigned to the rocket.
+          example: ARTEMIS
+        status:
+          type: string
+          description: The operational status of the rocket.
+          enum: [LAUNCHED, EXPLODED]
+          example: LAUNCHED
+        reason:
+          type: string
+          description: If exploded, the reason for the explosion.
+          nullable: true
+          example: PRESSURE_VESSEL_FAILURE
+        lastUpdateTime:
+          type: string
+          format: date-time
+          description: Timestamp of the last processed message that updated this state.
+          example: 2022-02-02T19:39:05.86337+01:00
+        lastProcessedMessageNumber:
+          type: integer
+          format: int64
+          description: The highest message number processed for this rocket.
+          example: 12345
+      required:
+        - id
+        - type
+        - currentSpeed
+        - mission
+        - status
+        - lastUpdateTime
+        - lastProcessedMessageNumber
+
+    TelemetryMessage:
+      type: object
+      description: Base schema for any telemetry message received from a rocket.
+      properties:
+        metadata:
+          $ref: '#/components/schemas/MessageMetadata'
+        message:
+          $ref: '#/components/schemas/Message'
+      required:
+        - metadata
+        - message
+
+    Message:
+      type: object
+      description: |
+        The specific message payload, determined by `metadata.messageType`.
+      properties:
+        type:
+          type: string
+          description: Rocket type (for RocketLaunched)
+          example: Falcon-9
+        launchSpeed:
+          type: integer
+          format: int64
+          description: Launch speed (for RocketLaunched)
+          example: 500
+        mission:
+          type: string
+          description: Mission name (for RocketLaunched)
+          example: ARTEMIS
+        by:
+          type: integer
+          format: int64
+          description: Amount for speed change (for RocketSpeedIncreased/Decreased)
+          example: 3000
+        reason:
+          type: string
+          description: Reason for explosion (for RocketExploded)
+          example: PRESSURE_VESSEL_FAILURE
+        newMission:
+          type: string
+          description: New mission name (for RocketMissionChanged)
+          example: SHUTTLE_MIR
+
+    MessageMetadata:
+      type: object
+      properties:
+        channel:
+          type: string
+          format: uuid
+          description: Unique identifier for the rocket (also its ID).
+          example: 193270a9-c9cf-404a-8f83-838e71d9ae67
+        messageNumber:
+          type: integer
+          format: int64
+          description: Order of the message within its channel. Higher is newer.
+          example: 1
+        messageTime:
+          type: string
+          format: date-time
+          description: Timestamp when the message was sent (ISO 8601 format).
+          example: 2022-02-02T19:39:05.86337+01:00
+        messageType:
+          type: string
+          description: Type of event described by the message.
+          enum: [RocketLaunched, RocketSpeedIncreased, RocketSpeedDecreased, RocketExploded, RocketMissionChanged]
+          example: RocketLaunched
+      required:
+        - channel
+        - messageNumber
+        - messageTime
+        - messageType
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: A unique error code.
+          example: ROCKET_NOT_FOUND
+        message:
+          type: string
+          description: A human-readable error message.
+          example: Rocket with ID 'abc-123' not found.
+      required:
+        - code
+        - message
