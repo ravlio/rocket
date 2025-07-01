@@ -10,8 +10,8 @@ This document provides an overview of the design, implementation, and operationa
 
 1.  **Clone the Repository:**
     ```bash
-    git clone <your-repository-link>
-    cd rocket-state-service
+    git clone https://github.com/ravlio/rocket
+    cd rocket
     ```
 
 2.  **Install Dependencies:**
@@ -21,7 +21,7 @@ This document provides an overview of the design, implementation, and operationa
 
 3.  **Run Locally (Development):**
     ```bash
-    go run ./cmd/rocket-state-service/main.go
+    go run ./cmd/main.go
     ```
     The service will start on `http://localhost:8088` by default
 
